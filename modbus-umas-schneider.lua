@@ -6,6 +6,7 @@
 
 -- Mapping of function code to name
 -- Source: http://lirasenlared.blogspot.com/2017/08/the-unity-umas-protocol-part-i.html
+
 local function_code_to_name = {
     [1] = "0x01 - INIT_COMM: Initialize UMAS communication",
     [2] = "0x02 - READ_ID: Read PLC ID",
@@ -39,6 +40,8 @@ local function_code_to_name = {
     [254] = "0xfe - Response (Success)",
     [253] = "0xfd - Response (Error)"
 }
+
+
 
 --- Map function code to name
 -- @param code UMAS function code
@@ -75,6 +78,44 @@ p_umas.fields = { f_session_key, f_umas_func_code, f_umas_data }
 -- Original Modbus dissector
 local modbus_dis = Dissector.get("mbtcp")
 
+function default_dissector(t_umas, umas_data)
+    t_umas:add(f_umas_data, umas_data)
+end
+
+local function_code_to_function = {
+    [1] = default_dissector,
+    [2] = default_dissector,
+    [3] = default_dissector,
+    [4] = default_dissector,
+    [6] = default_dissector,
+    [10] = default_dissector,
+    [16] = default_dissector,
+    [17] = default_dissector,
+    [18] = default_dissector,
+    [32] = default_dissector,
+    [34] = default_dissector,
+    [35] = default_dissector,
+    [36] = default_dissector,
+    [37] = default_dissector,
+    [38] = default_dissector,
+    [48] = default_dissector,
+    [49] = default_dissector,
+    [50] = default_dissector,
+    [51] = default_dissector,
+    [52] = default_dissector,
+    [53] = default_dissector,
+    [57] = default_dissector,
+    [58] = default_dissector,
+    [59] = default_dissector,
+    [80] = default_dissector,
+    [88] = default_dissector,
+    [112] = default_dissector,
+    [113] = default_dissector,
+    [115] = default_dissector,
+    [254] = default_dissector,
+    [253] = default_dissector
+}
+
 --- UMAS packet dissector
 function p_umas.dissector(buf, pkt, tree)
     -- Get packet size
@@ -105,12 +146,23 @@ function p_umas.dissector(buf, pkt, tree)
     -- UMAS subtree
     local umas_func_code = buf(9, 1)
     local umas_func_name = get_umas_function_name(umas_func_code:uint())
-    local umas_data = buf(10):bytes():tohex()
+    local umas_data
+    if umas_func_name ~= nil then
+        umas_data = buf(10):bytes():tohex()
+        local t_umas = tree:add(p_umas, buf(8), "UMAS")
+        t_umas:add(f_session_key, buf(8, 1))
+        t_umas:add(f_umas_func_code, umas_func_code):append_text(" (" .. umas_func_name .. ")")
+        local f = function_code_to_function[umas_func_code:uint()]
+        f(t_umas, umas_data)
+    else
+        umas_data = buf(10):bytes():tohex()
+        local t_umas = tree:add(p_umas, buf(8), "UMAS")
+        t_umas:add(f_session_key, buf(8, 1))
+        t_umas:add(f_umas_func_code, umas_func_code):append_text(" (" .. umas_func_name .. ")")
+        default_dissector(t_umas, umas_data)
+    end
 
-    local t_umas = tree:add(p_umas, buf(8), "UMAS")
-    t_umas:add(f_session_key, buf(8, 1))
-    t_umas:add(f_umas_func_code, umas_func_code):append_text(" (" .. umas_func_name .. ")")
-    t_umas:add(f_umas_data, umas_data)
+
 
     -- Set protocol and info in the packet list
     pkt.cols.protocol = "UMAS"
