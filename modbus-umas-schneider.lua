@@ -1,126 +1,121 @@
 --[[
-    lua wireshark addon for the UMAS embeded modbus protocol 
-    made by biero-el-corridor
+    Wireshark dissector for UMAS protocol used in Schneider Electric Modicon PLC
+    Made by biero-el-corridor
+    Modified by Yanis Wang
 --]]
 
--- functions that made the concordance of the umas_code -> funtions meaning
-function get_umas_function_name(code)
-    local code_name = "Unknow"
-    -- source: http://lirasenlared.blogspot.com/2017/08/the-unity-umas-protocol-part-i.html
-    if code == 1 then code_name = "0x01 - INIT_COMM: Initialize a UMAS communication"
-    elseif code == 2 then code_name = "0x02 - READ_ID: Request a PLC ID"
-    elseif code == 3 then code_name = "0x03 - READ_PROJECT_INFO: Read Project Information"
-    elseif code == 4 then code_name = "0x04 - READ_PLC_INFO: Get internal PLC Info"
-    elseif code == 6 then code_name = "0x06 - READ_CARD_INFO: Get internal PLC SD-Card Info"
-    elseif code == 10 then code_name = "0x0A - REPEAT: Sends back data sent to the PLC (used for synchronization)"
-    elseif code == 16 then code_name = "0x10 - TAKE_PLC_RESERVATION: Assign an owner to the PLC"
-    elseif code == 17 then code_name = "0x11 - RELEASE_PLC_RESERVATION: Release the reservation of a PLC"
-    elseif code == 18 then code_name = "0x12 - KEEP_ALIVE: Keep alive message (???)"
-    elseif code == 32 then code_name = "0x20 - READ_MEMORY_BLOCK: Read a memory block of the PLC"
-    elseif code == 34 then code_name = "0x22 - READ_VARIABLES: Read System bits, System Words and Strategy variables"
-    elseif code == 35 then code_name = "0x23 - WRITE_VARIABLES: Write System bits, System Words and Strategy variables"
-    elseif code == 36 then code_name = "0x24 - READ_COILS_REGISTERS: Read coils and holding registers from PLC"
-    elseif code == 37 then code_name = "0x25 - WRITE_COILS_REGISTERS: Write coils and holding registers into PLC"
-    elseif code == 48 then code_name = "0x30 - INITIALIZE_UPLOAD: Initialize Strategy upload (copy from engineering PC to PLC)"
-    elseif code == 49 then code_name = "0x31 - UPLOAD_BLOCK: Upload (copy from engineering PC to PLC) a strategy block to the PLC"
-    elseif code == 50 then code_name = "0x32 - END_STRATEGY_UPLOAD: Finish strategy Upload (copy from engineering PC to PLC)"
-    elseif code == 51 then code_name = "0x33 - INITIALIZE_UPLOAD: Initialize Strategy download (copy from PLC to engineering PC)"
-    elseif code == 52 then code_name = "0x34 - DOWNLOAD_BLOCK: Download (copy from PLC to engineering PC) a strategy block"
-    elseif code == 53 then code_name = "0x35 - END_STRATEGY_DOWNLOAD: Finish strategy Download (copy from PLC to engineering PC)"
-    elseif code == 57 then code_name = "0x39 - READ_ETH_MASTER_DATA: Read Ethernet Master Data"
-    elseif code == 58 then code_name = "0x40 - START_PLC: Starts the PLC"
-    elseif code == 59 then code_name = "0x41 - STOP_PLC: Stops the PLC"
-    elseif code == 80 then code_name = "0x50 - MONITOR_PLC: Monitors variables, Systems bits and words"
-    elseif code == 88 then code_name = "0x58 - CHECK_PLC: Check PLC Connection status"
-    elseif code == 112 then code_name = "0x70 - READ_IO_OBJECT: Read IO Object"
-    elseif code == 113 then code_name = "0x71 - WRITE_IO_OBJECT: WriteIO Object"
-    elseif code == 115 then code_name = "0x73 - GET_STATUS_MODULE: Get Status Module"
-    elseif code == 254 then code_name = "0xfe - Response Meaning OK"
-    elseif code == 253 then code_name = "0xfd - Response Meaning Error" end
-    return code_name
-end
+-- Mapping of function code to name
+-- Source: http://lirasenlared.blogspot.com/2017/08/the-unity-umas-protocol-part-i.html
+local function_code_to_name = {
+    [1] = "0x01 - INIT_COMM: Initialize UMAS communication",
+    [2] = "0x02 - READ_ID: Read PLC ID",
+    [3] = "0x03 - READ_PROJECT_INFO: Read project information",
+    [4] = "0x04 - READ_PLC_INFO: Read internal PLC information",
+    [6] = "0x06 - READ_CARD_INFO: Read internal SD card information",
+    [10] = "0x0A - REPEAT: Send back data sent to the PLC (used for synchronization)",
+    [16] = "0x10 - TAKE_PLC_RESERVATION: Assign an owner to the PLC",
+    [17] = "0x11 - RELEASE_PLC_RESERVATION: Release reservation of the PLC",
+    [18] = "0x12 - KEEP_ALIVE: Keep alive message",
+    [32] = "0x20 - READ_MEMORY_BLOCK: Read a memory block of the PLC",
+    [34] = "0x22 - READ_VARIABLES: Read system bits, system words and strategy variables",
+    [35] = "0x23 - WRITE_VARIABLES: Write system bits, system words and strategy variables",
+    [36] = "0x24 - READ_COILS_REGISTERS: Read coils and holding registers",
+    [37] = "0x25 - WRITE_COILS_REGISTERS: Write coils and holding registers",
+    [38] = "0x26 - READ DATA DICTIONARY: Read information about the data dictionary",
+    [48] = "0x30 - INITIALIZE_UPLOAD: Initialize strategy upload (from engineering station to PLC)",
+    [49] = "0x31 - UPLOAD_BLOCK: Upload a strategy block to the PLC (from engineering station to PLC)",
+    [50] = "0x32 - END_STRATEGY_UPLOAD: Finish strategy upload (from engineering station to PLC)",
+    [51] = "0x33 - INITIALIZE_DOWNLOAD: Initialize strategy download (from PLC to engineering station)",
+    [52] = "0x34 - DOWNLOAD_BLOCK: Download a strategy block (from PLC to engineering station)",
+    [53] = "0x35 - END_STRATEGY_DOWNLOAD: Finish strategy download (from PLC to engineering station)",
+    [57] = "0x39 - READ_ETH_MASTER_DATA: Read Ethernet master data",
+    [58] = "0x40 - START_PLC: Start the PLC",
+    [59] = "0x41 - STOP_PLC: Stop the PLC",
+    [80] = "0x50 - MONITOR_PLC: Monitor variables, systems bits and words",
+    [88] = "0x58 - CHECK_PLC: Check PLC connection status",
+    [112] = "0x70 - READ_IO_OBJECT: Read IO object",
+    [113] = "0x71 - WRITE_IO_OBJECT: Write IO object",
+    [115] = "0x73 - GET_STATUS_MODULE: Get module status",
+    [254] = "0xfe - Response (Success)",
+    [253] = "0xfd - Response (Error)"
+}
 
-modbus1_protocol = Proto("Modbus1", "Modbus .")
-umas_protocol = Proto("UMAS", "UMAS .")
+--- Map function code to name
+-- @param code UMAS function code
+local function get_umas_function_name(code)
+    local name = function_code_to_name[code]
 
--- ressourc that worth your time https://www.wireshark.org/docs/wsdg_html_chunked/lua_module_Proto.html
------------ part of the modbus protocol ---------------
-Transaction_Identifier  = ProtoField.uint16("Modbus1.Transaction_Identifier"  , "Transaction_Identifier"  , base.DEC)
-Protocol_Identifier     = ProtoField.uint16("Modbus1.Protocol_Identifier"     , "Protocol_Identifier"     , base.DEC)
-Length                  = ProtoField.uint16("Modbus1.Length"                  , "Length"                  , base.DEC)
-Unit_Identifier         = ProtoField.int8("Modbus1.Unit_Identifier"         , "Unit_Identifier"         , base.DEC)
-modbus1_protocol.fields = { Transaction_Identifier, Protocol_Identifier, Length, Unit_Identifier }
--------------------------------------------------------
-
------------ part of the UMAS protocol -----------------
-Function_Code           = ProtoField.uint8("UMAS.Function_Code"         , "Function_Code"        , base.HEX_DEC)
-Pairing_Key             = ProtoField.uint8("UMAS.Pairing_Key"           , "Pairing_Key"          , base.HEX)
-Umas_Functions_Code     = ProtoField.uint8("UMAS.Umas_Functions_Code"   , "Umas_Functions_Code"  , base.DEC)
-Umas_Data               = ProtoField.string("UMAS.Umas_Data"            , "Umas_Data"            , base.ASCII )
-umas_protocol.fields    = { Function_Code, Pairing_Key, Functions_Code , Umas_Functions_Code ,Umas_Data }
--------------------------------------------------------
-
-function modbus1_protocol.dissector(buffer,pinfo,tree)
-    -- get the size of the packet sections 
-    length = buffer:len()
-
-    ------------------------------------------
-    -- BEGIN OF THE MODBUS SECTIONS ----------
-    ------------------------------------------
-
-    -- if the sections is empty , terminate the process
-    if length == 0 then return end
-    
-    -- apply the name in the column if the protocol is detected
-    pinfo.cols.protocol = modbus1_protocol.name
-
-    -- add the layer umas in the list of potential layer 
-    local subtree       = tree:add(modbus1_protocol, buffer()      , "Modbus Protocol Data")
-    local modbusSubtree = subtree:add(modbus1_protocol, buffer()   ,"modbus header")
-
-    modbusSubtree:add(Transaction_Identifier   ,buffer(0,2))
-    modbusSubtree:add(Protocol_Identifier      ,buffer(2,2))
-    modbusSubtree:add(Length                   ,buffer(4,2))
-    modbusSubtree:add(Unit_Identifier          ,buffer(6,1))
-    ------------------------------------------
-    -- END OF THE MODBUS SECTIONS ------------
-    ------------------------------------------
-    
-    ------------------------------------------
-    -- BEGIN OF THE UMAS SECTIONS ------------
-    ------------------------------------------
-
-    local umas_identifier = buffer(7,1):le_uint()
-    local umas_code = buffer(9,1):le_uint()
-    local umas_code_name = get_umas_function_name(umas_code)
-
-    local getData = buffer(10)
-    local data = getData:le_ustring()
-
-    if(umas_identifier == 90) 
-    then
-        local data_length = length - 10
-        local umasSubtree   = subtree:add(modbus1_protocol ,buffer()   ,"umas")
-        umasSubtree:add(Function_Code, buffer(7,1))
-        umasSubtree:add(Pairing_Key, buffer(8,1))
-        umasSubtree:add(Umas_Functions_Code,buffer(9,1)):append_text(" (" .. umas_code_name .. ")")
-        umasSubtree:add(Umas_Data, getData, data)
+    if name ~= nil then
+        return name
+    else
+        return "Unknown"
     end
-    ------------------------------------------
-    -- END OF THE UMAS SECTIONS ------------
-    ------------------------------------------ 
 end
 
--- subtree for the definitions of the UMAS protocol. 
-function umas_protocol.dissector(buffer,pinfo,tree)
-    length = buffer:len()
-    if length == 0 then return end
-    pinfo.cols.protocol = umas_protocol.name
+-- Modbus
+local p_modbus = Proto("mbumas", "Modbus (UMAS)")
 
-    local subtree = tree:add(umas_protocol, buffer, "UMAS")
-    subtree:add_le(Function_Code, buffer(7,1))
+local f_trans_id = ProtoField.uint16("mbumas.trans_id", "Transaction Identifier", base.DEC)
+local f_proto_id = ProtoField.uint16("mbumas.proto_id", "Protocol Identifier", base.DEC)
+local f_length = ProtoField.uint16("mbumas.length", "Length", base.DEC)
+local f_unit_id = ProtoField.uint8("mbumas.unit_id", "Unit Identifier", base.DEC)
+local f_func_code = ProtoField.uint8("mbumas.func_code", "Function Code", base.DEC)
+
+p_modbus.fields = { f_trans_id, f_proto_id, f_length, f_unit_id, f_func_code }
+
+-- UMAS
+local p_umas = Proto("umas", "UMAS")
+
+local f_session_key = ProtoField.uint8("umas.session", "Session Key", base.HEX)
+local f_umas_func_code = ProtoField.uint8("umas.func_code", "Function Code", base.DEC)
+local f_umas_data = ProtoField.string("umas.data", "Data", base.ASCII)
+
+p_umas.fields = { f_session_key, f_umas_func_code, f_umas_data }
+
+-- Original Modbus dissector
+local modbus_dis = Dissector.get("mbtcp")
+
+--- UMAS packet dissector
+function p_umas.dissector(buf, pkt, tree)
+    -- Get packet size
+    local length = buf:len()
+
+    -- Check packet size
+    if length < 10 then
+        modbus_dis:call(buf, pkt, tree)
+        return
+    end
+
+    local func_code = buf(7, 1)
+
+    -- Check function code
+    if buf(7, 1):uint() ~= 90 then
+        modbus_dis:call(buf, pkt, tree)
+        return
+    end
+
+    -- Modbus subtree
+    local t_modbus = tree:add(p_modbus, buf(), "Modbus")
+    t_modbus:add(f_trans_id, buf(0, 2))
+    t_modbus:add(f_proto_id, buf(2, 2))
+    t_modbus:add(f_length, buf(4, 2))
+    t_modbus:add(f_unit_id, buf(6, 1))
+    t_modbus:add(f_func_code, func_code)
+
+    -- UMAS subtree
+    local umas_func_code = buf(9, 1)
+    local umas_func_name = get_umas_function_name(umas_func_code:uint())
+    local umas_data = buf(10):bytes():tohex()
+
+    local t_umas = tree:add(p_umas, buf(8), "UMAS")
+    t_umas:add(f_session_key, buf(8, 1))
+    t_umas:add(f_umas_func_code, umas_func_code):append_text(" (" .. umas_func_name .. ")")
+    t_umas:add(f_umas_data, umas_data)
+
+    -- Set protocol and info in the packet list
+    pkt.cols.protocol = "UMAS"
+    pkt.cols.info = umas_func_name
 end
 
-local modbus = DissectorTable.get("tcp.port")
-modbus:add(502, modbus1_protocol)
-
+local tcp_encap_table = DissectorTable.get("tcp.port")
+tcp_encap_table:add(502, p_umas)
